@@ -42,7 +42,7 @@ func initializeLogger() (*slog.Logger, closeFunc, error) {
 			return nil, nil, fmt.Errorf("failed to open log file: %w", err)
 		}
 
-		fileHandler := slog.NewTextHandler(bufferedFile, &slog.HandlerOptions{
+		fileHandler := slog.NewJSONHandler(bufferedFile, &slog.HandlerOptions{
 			Level: slog.LevelInfo,
 		})
 
