@@ -5,7 +5,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -31,6 +30,9 @@ func main() {
 
 func initializeLogger() (*slog.Logger, closeFunc, error) {
 	filepath := os.Getenv("LINKO_LOG_FILE")
+	stdErrorHandler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	})
 
 	if filepath != "" {
 		file, err := os.OpenFile(filepath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
@@ -40,8 +42,13 @@ func initializeLogger() (*slog.Logger, closeFunc, error) {
 			return nil, nil, fmt.Errorf("failed to open log file: %w", err)
 		}
 
-		multiWriter := io.MultiWriter(os.Stderr, bufferedFile)
-		logger := slog.New(slog.NewTextHandler(multiWriter, nil))
+		fileHandler := slog.NewTextHandler(bufferedFile, &slog.HandlerOptions{
+			Level: slog.LevelInfo,
+		})
+
+		combinedHandler := slog.NewMultiHandler(stdErrorHandler, fileHandler)
+
+		logger := slog.New(combinedHandler)
 
 		closeF := func() error {
 			if err := bufferedFile.Flush(); err != nil {
@@ -61,7 +68,7 @@ func initializeLogger() (*slog.Logger, closeFunc, error) {
 		return nil
 	}
 
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	logger := slog.New(stdErrorHandler)
 
 	return logger, closeF, nil
 }
@@ -83,7 +90,7 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 
 	st, err := store.New(dataDir, logger)
 	if err != nil {
-		logger.Info(fmt.Sprintf("failed to create store: %v", err))
+		logger.Error(fmt.Sprintf("failed to create store: %v", err))
 		return 1
 	}
 
@@ -97,13 +104,13 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	logger.Info("Linko is shutting down")
+	logger.Debug("Linko is shutting down")
 	if err := s.shutdown(shutdownCtx); err != nil {
-		logger.Info("failed to shutdown server: %v", err)
+		logger.Error("failed to shutdown server: %v", err)
 		return 1
 	}
 	if serverErr != nil {
-		logger.Info("server error: %v", serverErr)
+		logger.Error("server error: %v", serverErr)
 		return 1
 	}
 	return 0
