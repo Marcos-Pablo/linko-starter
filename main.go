@@ -29,11 +29,26 @@ func main() {
 }
 
 func initializeLogger() (*slog.Logger, closeFunc, error) {
-	filepath := os.Getenv("LINKO_LOG_FILE")
+	replaceAttr := func(groups []string, a slog.Attr) slog.Attr {
+		if a.Key == "error" {
+			err, ok := a.Value.Any().(error)
+
+			if !ok {
+				return a
+			}
+
+			return slog.String("error", fmt.Sprintf("%+v", err))
+		}
+
+		return a
+	}
+
 	stdErrorHandler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
+		Level:       slog.LevelDebug,
+		ReplaceAttr: replaceAttr,
 	})
 
+	filepath := os.Getenv("LINKO_LOG_FILE")
 	if filepath != "" {
 		file, err := os.OpenFile(filepath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
 		bufferedFile := bufio.NewWriterSize(file, 8192)
@@ -43,7 +58,8 @@ func initializeLogger() (*slog.Logger, closeFunc, error) {
 		}
 
 		fileHandler := slog.NewJSONHandler(bufferedFile, &slog.HandlerOptions{
-			Level: slog.LevelInfo,
+			Level:       slog.LevelInfo,
+			ReplaceAttr: replaceAttr,
 		})
 
 		combinedHandler := slog.NewMultiHandler(stdErrorHandler, fileHandler)
