@@ -46,48 +46,87 @@ func replaceAttr(groups []string, a slog.Attr) slog.Attr {
 }
 
 func initializeLogger() (*slog.Logger, closeFunc, error) {
-	stdErrorHandler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+	var handlers []slog.Handler
+	var closers []closeFunc
+
+	stdHandler, stdClose, err := getStdLogHandler()
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create std log handler: %w", err)
+	}
+
+	handlers = append(handlers, stdHandler)
+	closers = append(closers, stdClose)
+
+	fileHandler, fileHandlClose, err := getFileLongHandler()
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create log file handler: %w", err)
+	}
+
+	if fileHandler != nil {
+		handlers = append(handlers, fileHandler)
+		closers = append(closers, fileHandlClose)
+	}
+
+	logger := slog.New(slog.NewMultiHandler(handlers...))
+
+	closeF := func() error {
+		var errs []error
+		for _, c := range closers {
+			if err := c(); err != nil {
+				errs = append(errs, err)
+			}
+		}
+
+		return errors.Join(errs...)
+	}
+
+	return logger, closeF, nil
+}
+
+func getStdLogHandler() (slog.Handler, closeFunc, error) {
+	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level:       slog.LevelDebug,
 		ReplaceAttr: replaceAttr,
 	})
-
-	filepath := os.Getenv("LINKO_LOG_FILE")
-	if filepath != "" {
-		file, err := os.OpenFile(filepath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
-		bufferedFile := bufio.NewWriterSize(file, 8192)
-
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to open log file: %w", err)
-		}
-
-		fileHandler := slog.NewJSONHandler(bufferedFile, &slog.HandlerOptions{
-			Level:       slog.LevelInfo,
-			ReplaceAttr: replaceAttr,
-		})
-
-		combinedHandler := slog.NewMultiHandler(stdErrorHandler, fileHandler)
-
-		logger := slog.New(combinedHandler)
-
-		closeF := func() error {
-			if err := bufferedFile.Flush(); err != nil {
-				return fmt.Errorf("failed to flush log file: %w", err)
-			}
-
-			if err := file.Close(); err != nil {
-				return fmt.Errorf("failed to close log file: %w", err)
-			}
-
-			return nil
-		}
-		return logger, closeF, nil
-	}
 
 	closeF := func() error {
 		return nil
 	}
 
-	logger := slog.New(stdErrorHandler)
+	return handler, closeF, nil
+}
 
-	return logger, closeF, nil
+func getFileLongHandler() (slog.Handler, closeFunc, error) {
+	filepath := os.Getenv("LINKO_LOG_FILE")
+
+	if filepath == "" {
+		return nil, nil, nil
+	}
+
+	file, err := os.OpenFile(filepath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
+	bufferedFile := bufio.NewWriterSize(file, 8192)
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to open log file: %w", err)
+	}
+
+	fileHandler := slog.NewJSONHandler(bufferedFile, &slog.HandlerOptions{
+		Level:       slog.LevelInfo,
+		ReplaceAttr: replaceAttr,
+	})
+
+	closeF := func() error {
+		if err := bufferedFile.Flush(); err != nil {
+			return fmt.Errorf("failed to flush log file: %w", err)
+		}
+
+		if err := file.Close(); err != nil {
+			return fmt.Errorf("failed to close log file: %w", err)
+		}
+
+		return nil
+	}
+	return fileHandler, closeF, nil
 }
