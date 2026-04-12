@@ -102,10 +102,15 @@ func initializeLogger() (*slog.Logger, closeFunc, error) {
 		closers = append(closers, fileHandlClose)
 	}
 
+	env := os.Getenv("ENV")
+	hostname, _ := os.Hostname()
+
 	logger := slog.New(slog.NewMultiHandler(handlers...))
 	logger = logger.With(
 		slog.String("git_sha", build.GitSHA),
 		slog.String("build_time", build.BuildTime),
+		slog.String("env", env),
+		slog.String("hostname", hostname),
 	)
 
 	closeF := func() error {
