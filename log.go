@@ -24,6 +24,55 @@ type muiltiError interface {
 	Unwrap() []error
 }
 
+func initializeLogger() (*slog.Logger, closeFunc, error) {
+	var handlers []slog.Handler
+	var closers []closeFunc
+
+	stdHandler, stdClose, err := getStdLogHandler()
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create std log handler: %w", err)
+	}
+
+	handlers = append(handlers, stdHandler)
+	closers = append(closers, stdClose)
+
+	fileHandler, fileHandlClose, err := getFileLongHandler()
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create log file handler: %w", err)
+	}
+
+	if fileHandler != nil {
+		handlers = append(handlers, fileHandler)
+		closers = append(closers, fileHandlClose)
+	}
+
+	env := os.Getenv("ENV")
+	hostname, _ := os.Hostname()
+
+	logger := slog.New(slog.NewMultiHandler(handlers...))
+	logger = logger.With(
+		slog.String("git_sha", build.GitSHA),
+		slog.String("build_time", build.BuildTime),
+		slog.String("env", env),
+		slog.String("hostname", hostname),
+	)
+
+	closeF := func() error {
+		var errs []error
+		for _, c := range closers {
+			if err := c(); err != nil {
+				errs = append(errs, err)
+			}
+		}
+
+		return errors.Join(errs...)
+	}
+
+	return logger, closeF, nil
+}
+
 func errAttrs(err error) []slog.Attr {
 	attrs := []slog.Attr{
 		slog.Attr{
@@ -76,55 +125,6 @@ func replaceAttr(groups []string, a slog.Attr) slog.Attr {
 	}
 
 	return a
-}
-
-func initializeLogger() (*slog.Logger, closeFunc, error) {
-	var handlers []slog.Handler
-	var closers []closeFunc
-
-	stdHandler, stdClose, err := getStdLogHandler()
-
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create std log handler: %w", err)
-	}
-
-	handlers = append(handlers, stdHandler)
-	closers = append(closers, stdClose)
-
-	fileHandler, fileHandlClose, err := getFileLongHandler()
-
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create log file handler: %w", err)
-	}
-
-	if fileHandler != nil {
-		handlers = append(handlers, fileHandler)
-		closers = append(closers, fileHandlClose)
-	}
-
-	env := os.Getenv("ENV")
-	hostname, _ := os.Hostname()
-
-	logger := slog.New(slog.NewMultiHandler(handlers...))
-	logger = logger.With(
-		slog.String("git_sha", build.GitSHA),
-		slog.String("build_time", build.BuildTime),
-		slog.String("env", env),
-		slog.String("hostname", hostname),
-	)
-
-	closeF := func() error {
-		var errs []error
-		for _, c := range closers {
-			if err := c(); err != nil {
-				errs = append(errs, err)
-			}
-		}
-
-		return errors.Join(errs...)
-	}
-
-	return logger, closeF, nil
 }
 
 func getStdLogHandler() (slog.Handler, closeFunc, error) {
