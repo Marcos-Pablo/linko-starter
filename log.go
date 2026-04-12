@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 
+	"boot.dev/linko/internal/build"
 	"boot.dev/linko/internal/linkoerr"
 	pkgerr "github.com/pkg/errors"
 )
@@ -102,6 +103,10 @@ func initializeLogger() (*slog.Logger, closeFunc, error) {
 	}
 
 	logger := slog.New(slog.NewMultiHandler(handlers...))
+	logger = logger.With(
+		slog.String("git_sha", build.GitSHA),
+		slog.String("build_time", build.BuildTime),
+	)
 
 	closeF := func() error {
 		var errs []error
