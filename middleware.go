@@ -12,6 +12,7 @@ const logContextKey contextKey = "log_context"
 
 type LogContext struct {
 	Username string
+	Error    error
 }
 
 type spyReadCloser struct {
@@ -74,10 +75,21 @@ func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 				args = append(args, slog.String("user", logCtx.Username))
 			}
 
+			if logCtx.Error != nil {
+				args = append(args, slog.Any("error", logCtx.Error))
+			}
+
 			logger.Info(
 				"Served request",
 				args...,
 			)
 		})
 	}
+}
+
+func httpError(ctx context.Context, w http.ResponseWriter, status int, err error) {
+	if logCtx, ok := ctx.Value(logContextKey).(*LogContext); ok {
+		logCtx.Error = err
+	}
+	http.Error(w, err.Error(), status)
 }
