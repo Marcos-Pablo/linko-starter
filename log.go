@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -11,6 +10,7 @@ import (
 	"boot.dev/linko/internal/linkoerr"
 	"github.com/lmittmann/tint"
 	"github.com/mattn/go-isatty"
+	"github.com/natefinch/lumberjack"
 	pkgerr "github.com/pkg/errors"
 )
 
@@ -156,28 +156,25 @@ func getFileLongHandler() (slog.Handler, closeFunc, error) {
 		return nil, nil, nil
 	}
 
-	file, err := os.OpenFile(filepath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
-	bufferedFile := bufio.NewWriterSize(file, 8192)
-
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to open log file: %w", err)
+	rotatingFile := &lumberjack.Logger{
+		Filename:   filepath,
+		MaxSize:    1,
+		MaxAge:     28,
+		MaxBackups: 10,
+		LocalTime:  false,
+		Compress:   true,
 	}
 
-	fileHandler := slog.NewJSONHandler(bufferedFile, &slog.HandlerOptions{
-		Level:       slog.LevelInfo,
+	handler := slog.NewJSONHandler(rotatingFile, &slog.HandlerOptions{
 		ReplaceAttr: replaceAttr,
 	})
 
 	closeF := func() error {
-		if err := bufferedFile.Flush(); err != nil {
-			return fmt.Errorf("failed to flush log file: %w", err)
-		}
-
-		if err := file.Close(); err != nil {
+		if err := rotatingFile.Close(); err != nil {
 			return fmt.Errorf("failed to close log file: %w", err)
 		}
-
 		return nil
 	}
-	return fileHandler, closeF, nil
+
+	return handler, closeF, nil
 }
