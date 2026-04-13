@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
+	"slices"
 
 	"boot.dev/linko/internal/build"
 	"boot.dev/linko/internal/linkoerr"
@@ -25,6 +27,8 @@ type muiltiError interface {
 	error
 	Unwrap() []error
 }
+
+var sensitiveKeys = []string{"password", "key", "apikey", "secret", "pin", "creditcardno", "user"}
 
 func initializeLogger() (*slog.Logger, closeFunc, error) {
 	var handlers []slog.Handler
@@ -96,6 +100,22 @@ func errAttrs(err error) []slog.Attr {
 }
 
 func replaceAttr(groups []string, a slog.Attr) slog.Attr {
+	if slices.Contains(sensitiveKeys, a.Key) {
+		return slog.String(a.Key, "[REDACTED]")
+	}
+
+	if a.Value.Kind() == slog.KindString {
+
+		if URL, err := url.Parse(a.Value.String()); err == nil {
+			_, ok := URL.User.Password()
+
+			if ok {
+				URL.User = url.UserPassword(URL.User.Username(), "[REDACTED]")
+				return slog.String(a.Key, URL.String())
+			}
+		}
+	}
+
 	if a.Key == "error" {
 		err, ok := a.Value.Any().(error)
 
