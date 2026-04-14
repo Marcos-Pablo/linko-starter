@@ -178,7 +178,7 @@ func getFileLongHandler() (slog.Handler, closeFunc, error) {
 
 	rotatingFile := &lumberjack.Logger{
 		Filename:   filepath,
-		MaxSize:    1,
+		MaxSize:    500,
 		MaxAge:     28,
 		MaxBackups: 10,
 		LocalTime:  false,

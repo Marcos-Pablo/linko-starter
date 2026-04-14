@@ -37,8 +37,7 @@ func Test_requestLogger(t *testing.T) {
 		t.Errorf("Expected status code 200, got %d", rr.Code)
 	}
 
-	expectedLog := `time=2023-10-01T12:34:57.000Z level=INFO msg="Served request" method=GET path=/test client_ip=192.0.2.x
-`
+	expectedLog := `time=2023-10-01T12:34:57.000Z level=INFO msg="Served request" method=GET path=/test client_ip=192.0.2.x`
 	if logBuffer.String() != expectedLog {
 		t.Errorf("Expected log output:\n%s\nGot:\n%s", expectedLog, logBuffer.String())
 	}
