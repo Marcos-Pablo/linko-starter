@@ -26,6 +26,21 @@ func main() {
 }
 
 func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir string) int {
+	shutdownTracing, err := initTracing(ctx)
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to initialize tracing: %s\n", err)
+		return 1
+	}
+
+	defer func() {
+		err := shutdownTracing(context.Background())
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to shut down tracing: %v\n", err)
+		}
+
+	}()
+
 	logger, closeF, err := initializeLogger()
 
 	if err != nil {
